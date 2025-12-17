@@ -1,28 +1,13 @@
 from flask import Flask, request, jsonify, session, redirect, render_template
 import os
-from UserManagementModule import UserManager as UM
-from DomainManagementEngine import DomainManagementEngine as DME
-from MonitoringSystem import MonitoringSystem as MS
 import logger
+from backend_client import backend_post
+
 
 logger = logger.setup_logger("app")
-user_manager = UM()
-domain_engine = DME()
-monitoring_system = MS()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "group2_devops_project")
-
-
-# ---------------------------
-# Helpers
-# ---------------------------
-def _get_payload():
-    """Accept JSON or HTML form-data; always return a dict."""
-    data = request.get_json(silent=True)
-    if data is not None:
-        return data
-    return (request.form or {}).to_dict()
 
 
 # ---------------------------
@@ -35,22 +20,26 @@ def main_page():
     return app.send_static_file('main/main.html')
 
 
-@app.route('/login', methods=['GET', 'POST'])
+@app.route("/login", methods=["GET", "POST"])
 def login():
-    if request.method == 'GET':
+    # ---------- GET ----------
+    if request.method == "GET":
         if "username" in session:
             return redirect("/dashboard")
-        return app.send_static_file('login/login.html')
+        return app.send_static_file("login/login.html")
 
-    data = _get_payload()
-    username = (data.get("username") or "").strip()
-    password = data.get("password") or ""
+    # ---------- POST ----------
+    data = request.get_json(silent=True) or {}
 
-    if user_manager.validate_login(username, password):
-        session["username"] = username
-        return jsonify({"ok": True, "message": "Login successful", "username": username}), 200
+    resp, status = backend_post("/api/login", json=data)
 
-    return jsonify({"ok": False, "error": "Invalid username or password"}), 401
+    if status == 200 and resp.get("ok"):
+        session["username"] = resp["username"]
+        return jsonify({"ok": True}), 200
+
+    return jsonify({
+        "error": resp.get("error", "Login failed")
+    }), status
 
 
 @app.route('/register', methods=['GET', 'POST'])
